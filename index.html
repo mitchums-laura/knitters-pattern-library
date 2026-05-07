@@ -284,11 +284,6 @@
             font-size: 0.85em;
         }
 
-        #authSection button {
-            padding: 10px 20px;
-            font-size: 0.9em;
-        }
-
         .tier-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -356,7 +351,7 @@
                     <p class="tagline">YOUR KNITTING PATTERN LIBRARY</p>
                 </div>
                 <div id="authSection" style="text-align: right;">
-                    <button id="authBtn" onclick="openAuthModal()" style="padding: 10px 20px; background: var(--dusty-rose); color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">Sign In</button>
+                    <button id="authBtn" style="padding: 10px 20px; background: var(--dusty-rose); color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">Sign In</button>
                 </div>
             </div>
         </header>
@@ -434,7 +429,7 @@
                         <li>✓ Basic organization</li>
                         <li>✗ No cloud backup</li>
                     </ul>
-                    <button style="width: 100%;">Select</button>
+                    <button type="button" style="width: 100%;">Select</button>
                 </div>
 
                 <div class="tier-card" onclick="selectTier('starter')">
@@ -445,7 +440,7 @@
                         <li>✓ Cloud backup</li>
                         <li>✓ Email support</li>
                     </ul>
-                    <button style="width: 100%;">Select</button>
+                    <button type="button" style="width: 100%;">Select</button>
                 </div>
 
                 <div class="tier-card" onclick="selectTier('creator')">
@@ -456,7 +451,7 @@
                         <li>✓ Collaboration</li>
                         <li>✓ PDF export</li>
                     </ul>
-                    <button style="width: 100%;">Select</button>
+                    <button type="button" style="width: 100%;">Select</button>
                 </div>
 
                 <div class="tier-card" onclick="selectTier('studio')">
@@ -467,7 +462,7 @@
                         <li>✓ White-label domain</li>
                         <li>✓ Team accounts</li>
                     </ul>
-                    <button style="width: 100%;">Select</button>
+                    <button type="button" style="width: 100%;">Select</button>
                 </div>
             </div>
 
@@ -561,7 +556,7 @@
                     <label>Colorway</label>
                     <input type="text" id="editYarnColorway">
                 </div>
-                <button onclick="saveYarnInfo()">Save Yarn Info</button>
+                <button type="button" onclick="saveYarnInfo()">Save Yarn Info</button>
             </div>
 
             <div id="notes" class="tab-content">
@@ -569,7 +564,7 @@
                     <label>Pattern Notes & Worksheet</label>
                     <textarea id="editPatternNotes" style="min-height: 200px;"></textarea>
                 </div>
-                <button onclick="savePatternNotes()">Save Notes</button>
+                <button type="button" onclick="savePatternNotes()">Save Notes</button>
             </div>
 
             <div style="margin-top: 20px; padding-top: 20px; border-top: 2px solid var(--cream);">
@@ -602,26 +597,42 @@
         let userTier = 'free';
         let patterns = [];
         let currentPatternId = null;
+        let showedTierModalThisSession = false;
 
         onAuthStateChanged(auth, async (user) => {
             if (user) {
                 currentUser = user;
-                await loadUserTier();
-                if (!userTier || userTier === 'free') {
-                    document.getElementById('tierModal').classList.add('active');
-                } else {
+                
+                // Check if user has a tier in database
+                const userQuery = query(collection(db, 'users'), where('userId', '==', user.uid));
+                const userSnapshot = await getDocs(userQuery);
+                const userExists = !userSnapshot.empty;
+                
+                if (userExists) {
+                    // Returning user - load tier and show app
+                    userTier = userSnapshot.docs[0].data().tier || 'free';
                     document.getElementById('authPrompt').style.display = 'none';
                     document.getElementById('appContent').style.display = 'block';
+                    document.getElementById('authBtn').textContent = `${userTier.charAt(0).toUpperCase() + userTier.slice(1)} | Sign Out`;
+                    document.getElementById('authBtn').onclick = handleSignOut;
+                    loadPatterns();
+                } else {
+                    // New user - show tier modal (but only once per session)
+                    if (!showedTierModalThisSession) {
+                        showedTierModalThisSession = true;
+                        document.getElementById('tierModal').classList.add('active');
+                        document.getElementById('authPrompt').style.display = 'none';
+                        document.getElementById('appContent').style.display = 'none';
+                    }
                 }
-                document.getElementById('authBtn').textContent = `${userTier.charAt(0).toUpperCase() + userTier.slice(1)} | Sign Out`;
-                document.getElementById('authBtn').onclick = () => handleSignOut();
-                loadPatterns();
             } else {
                 currentUser = null;
+                showedTierModalThisSession = false;
                 document.getElementById('appContent').style.display = 'none';
                 document.getElementById('authPrompt').style.display = 'block';
+                document.getElementById('tierModal').classList.remove('active');
                 document.getElementById('authBtn').textContent = 'Sign In';
-                document.getElementById('authBtn').onclick = () => openAuthModal();
+                document.getElementById('authBtn').onclick = openAuthModal;
             }
         });
 
@@ -639,33 +650,19 @@
                 }
                 errorDiv.style.display = 'none';
                 closeAuthModal();
+                // Auth state change will handle showing tier modal
             } catch (error) {
                 errorDiv.textContent = error.message;
                 errorDiv.style.display = 'block';
             }
         };
 
-        window.handleSignOut = async function() {
-            await signOut(auth);
-        };
-
-        window.loadUserTier = async function() {
-            if (!currentUser) return;
-            try {
-                const q = query(collection(db, 'users'), where('userId', '==', currentUser.uid));
-                const snapshot = await getDocs(q);
-                if (!snapshot.empty) {
-                    userTier = snapshot.docs[0].data().tier || 'free';
-                } else {
-                    userTier = 'free';
-                }
-            } catch (error) {
-                console.error('Error loading tier:', error);
-                userTier = 'free';
-            }
+        window.handleSignOut = function() {
+            signOut(auth);
         };
 
         window.selectTier = async function(tier) {
+            if (!currentUser) return;
             userTier = tier;
             try {
                 await setDoc(doc(db, 'users', currentUser.uid), {
@@ -674,12 +671,12 @@
                     selectedAt: new Date().toISOString()
                 });
                 document.getElementById('tierModal').classList.remove('active');
-                document.getElementById('authPrompt').style.display = 'none';
                 document.getElementById('appContent').style.display = 'block';
+                document.getElementById('authBtn').textContent = `${tier.charAt(0).toUpperCase() + tier.slice(1)} | Sign Out`;
                 loadPatterns();
             } catch (error) {
                 console.error('Error selecting tier:', error);
-                alert('Error selecting tier');
+                alert('Error selecting tier: ' + error.message);
             }
         };
 
