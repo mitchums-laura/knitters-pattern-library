@@ -289,6 +289,41 @@
             font-size: 0.9em;
         }
 
+        .tier-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .tier-card {
+            border: 2px solid var(--cream);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .tier-card:hover {
+            border-color: var(--dusty-rose);
+            transform: translateY(-2px);
+        }
+
+        .tier-card h3 {
+            color: var(--dusty-rose);
+            margin-bottom: 10px;
+        }
+
+        .tier-card ul {
+            text-align: left;
+            font-size: 0.85em;
+            color: var(--charcoal);
+            margin-bottom: 15px;
+            list-style: none;
+            padding: 0;
+        }
+
         @media (max-width: 768px) {
             h1 {
                 font-size: 2em;
@@ -385,6 +420,61 @@
         </div>
     </div>
 
+    <!-- Tier Selection Modal -->
+    <div class="modal" id="tierModal">
+        <div class="modal-content" style="max-width: 900px;">
+            <h2 style="color: var(--dusty-rose); margin-bottom: 30px; text-align: center;">Choose Your Tier</h2>
+            
+            <div class="tier-grid">
+                <div class="tier-card" onclick="selectTier('free')">
+                    <h3>Free</h3>
+                    <p style="font-size: 0.9em; color: var(--gold); margin-bottom: 15px;">$0/month</p>
+                    <ul>
+                        <li>✓ 5 patterns max</li>
+                        <li>✓ Basic organization</li>
+                        <li>✗ No cloud backup</li>
+                    </ul>
+                    <button style="width: 100%;">Select</button>
+                </div>
+
+                <div class="tier-card" onclick="selectTier('starter')">
+                    <h3>Starter</h3>
+                    <p style="font-size: 0.9em; color: var(--gold); margin-bottom: 15px;">$39/year</p>
+                    <ul>
+                        <li>✓ Unlimited patterns</li>
+                        <li>✓ Cloud backup</li>
+                        <li>✓ Email support</li>
+                    </ul>
+                    <button style="width: 100%;">Select</button>
+                </div>
+
+                <div class="tier-card" onclick="selectTier('creator')">
+                    <h3>Creator</h3>
+                    <p style="font-size: 0.9em; color: var(--gold); margin-bottom: 15px;">$79/year</p>
+                    <ul>
+                        <li>✓ Everything in Starter</li>
+                        <li>✓ Collaboration</li>
+                        <li>✓ PDF export</li>
+                    </ul>
+                    <button style="width: 100%;">Select</button>
+                </div>
+
+                <div class="tier-card" onclick="selectTier('studio')">
+                    <h3>Studio</h3>
+                    <p style="font-size: 0.9em; color: var(--gold); margin-bottom: 15px;">$159/year</p>
+                    <ul>
+                        <li>✓ Everything in Creator</li>
+                        <li>✓ White-label domain</li>
+                        <li>✓ Team accounts</li>
+                    </ul>
+                    <button style="width: 100%;">Select</button>
+                </div>
+            </div>
+
+            <p style="text-align: center; color: var(--gold); font-size: 0.9em;">You can change your tier anytime</p>
+        </div>
+    </div>
+
     <!-- Add/Edit Pattern Modal -->
     <div class="modal" id="patternModal">
         <div class="modal-content">
@@ -439,7 +529,6 @@
                 <button class="tab-btn" onclick="switchTab('notes')">📝 Notes</button>
             </div>
 
-            <!-- Overview Tab -->
             <div id="overview" class="tab-content active">
                 <div class="form-group">
                     <label>Designer</label>
@@ -459,7 +548,6 @@
                 </div>
             </div>
 
-            <!-- Yarn Tab -->
             <div id="yarn" class="tab-content">
                 <div class="form-group">
                     <label>Yarn Brand</label>
@@ -476,7 +564,6 @@
                 <button onclick="saveYarnInfo()">Save Yarn Info</button>
             </div>
 
-            <!-- Notes Tab -->
             <div id="notes" class="tab-content">
                 <div class="form-group">
                     <label>Pattern Notes & Worksheet</label>
@@ -512,15 +599,21 @@
 
         let currentUser = null;
         let isSignUpMode = false;
+        let userTier = 'free';
         let patterns = [];
         let currentPatternId = null;
 
         onAuthStateChanged(auth, async (user) => {
             if (user) {
                 currentUser = user;
-                document.getElementById('authPrompt').style.display = 'none';
-                document.getElementById('appContent').style.display = 'block';
-                document.getElementById('authBtn').textContent = `Sign Out`;
+                await loadUserTier();
+                if (!userTier || userTier === 'free') {
+                    document.getElementById('tierModal').classList.add('active');
+                } else {
+                    document.getElementById('authPrompt').style.display = 'none';
+                    document.getElementById('appContent').style.display = 'block';
+                }
+                document.getElementById('authBtn').textContent = `${userTier.charAt(0).toUpperCase() + userTier.slice(1)} | Sign Out`;
                 document.getElementById('authBtn').onclick = () => handleSignOut();
                 loadPatterns();
             } else {
@@ -556,6 +649,40 @@
             await signOut(auth);
         };
 
+        window.loadUserTier = async function() {
+            if (!currentUser) return;
+            try {
+                const q = query(collection(db, 'users'), where('userId', '==', currentUser.uid));
+                const snapshot = await getDocs(q);
+                if (!snapshot.empty) {
+                    userTier = snapshot.docs[0].data().tier || 'free';
+                } else {
+                    userTier = 'free';
+                }
+            } catch (error) {
+                console.error('Error loading tier:', error);
+                userTier = 'free';
+            }
+        };
+
+        window.selectTier = async function(tier) {
+            userTier = tier;
+            try {
+                await setDoc(doc(db, 'users', currentUser.uid), {
+                    userId: currentUser.uid,
+                    tier: tier,
+                    selectedAt: new Date().toISOString()
+                });
+                document.getElementById('tierModal').classList.remove('active');
+                document.getElementById('authPrompt').style.display = 'none';
+                document.getElementById('appContent').style.display = 'block';
+                loadPatterns();
+            } catch (error) {
+                console.error('Error selecting tier:', error);
+                alert('Error selecting tier');
+            }
+        };
+
         window.toggleAuthMode = function() {
             isSignUpMode = !isSignUpMode;
             document.getElementById('authTitle').textContent = isSignUpMode ? 'Create Account' : 'Sign In';
@@ -577,6 +704,11 @@
 
         window.savePattern = async function(e) {
             e.preventDefault();
+            
+            if (userTier === 'free' && patterns.length >= 5) {
+                alert('You\'ve reached the 5 pattern limit on the Free tier. Upgrade to Starter to add more!');
+                return;
+            }
             
             const pattern = {
                 userId: currentUser.uid,
