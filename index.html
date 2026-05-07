@@ -429,7 +429,7 @@
                         <li>✓ Basic organization</li>
                         <li>✗ No cloud backup</li>
                     </ul>
-                    <button type="button" style="width: 100%;">Select</button>
+                    <button type="button" style="width: 100%; pointer-events: none;">Select</button>
                 </div>
 
                 <div class="tier-card" onclick="selectTier('starter')">
@@ -440,7 +440,7 @@
                         <li>✓ Cloud backup</li>
                         <li>✓ Email support</li>
                     </ul>
-                    <button type="button" style="width: 100%;">Select</button>
+                    <button type="button" style="width: 100%; pointer-events: none;">Select</button>
                 </div>
 
                 <div class="tier-card" onclick="selectTier('creator')">
@@ -451,7 +451,7 @@
                         <li>✓ Collaboration</li>
                         <li>✓ PDF export</li>
                     </ul>
-                    <button type="button" style="width: 100%;">Select</button>
+                    <button type="button" style="width: 100%; pointer-events: none;">Select</button>
                 </div>
 
                 <div class="tier-card" onclick="selectTier('studio')">
@@ -462,7 +462,7 @@
                         <li>✓ White-label domain</li>
                         <li>✓ Team accounts</li>
                     </ul>
-                    <button type="button" style="width: 100%;">Select</button>
+                    <button type="button" style="width: 100%; pointer-events: none;">Select</button>
                 </div>
             </div>
 
@@ -603,13 +603,11 @@
             if (user) {
                 currentUser = user;
                 
-                // Check if user has a tier in database
                 const userQuery = query(collection(db, 'users'), where('userId', '==', user.uid));
                 const userSnapshot = await getDocs(userQuery);
                 const userExists = !userSnapshot.empty;
                 
                 if (userExists) {
-                    // Returning user - load tier and show app
                     userTier = userSnapshot.docs[0].data().tier || 'free';
                     document.getElementById('authPrompt').style.display = 'none';
                     document.getElementById('appContent').style.display = 'block';
@@ -617,7 +615,6 @@
                     document.getElementById('authBtn').onclick = handleSignOut;
                     loadPatterns();
                 } else {
-                    // New user - show tier modal (but only once per session)
                     if (!showedTierModalThisSession) {
                         showedTierModalThisSession = true;
                         document.getElementById('tierModal').classList.add('active');
@@ -650,7 +647,6 @@
                 }
                 errorDiv.style.display = 'none';
                 closeAuthModal();
-                // Auth state change will handle showing tier modal
             } catch (error) {
                 errorDiv.textContent = error.message;
                 errorDiv.style.display = 'block';
