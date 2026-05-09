@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pattern Haven - Knitting Pattern Library</title>
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes:wght@400&family=Quicksand:wght@300;400;600;700&family=Arvo:wght@400;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         :root {
@@ -36,6 +37,7 @@
         .card-image { width: 100%; height: 180px; background: linear-gradient(135deg, var(--gold) 0%, var(--dusty-rose) 100%); display: flex; align-items: center; justify-content: center; font-size: 3em; }
         .card-content { padding: 15px; }
         .card-title { font-weight: 700; margin-bottom: 8px; color: var(--dusty-rose); }
+        .card-badge { display: inline-block; background: var(--mint); color: var(--charcoal); padding: 4px 8px; border-radius: 4px; font-size: 0.75em; margin-top: 8px; }
         .modal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.5); z-index: 1000; padding: 20px; }
         .modal.active { display: flex; align-items: center; justify-content: center; }
         .modal-content { background: white; border-radius: 12px; max-width: 600px; width: 100%; max-height: 90vh; overflow-y: auto; padding: 30px; position: relative; }
@@ -43,9 +45,26 @@
         .form-group { margin-bottom: 15px; }
         .form-group label { display: block; margin-bottom: 5px; font-weight: 600; }
         .form-group input, .form-group textarea { width: 100%; padding: 10px; border: 2px solid var(--cream); border-radius: 6px; font-family: 'Quicksand'; }
+        .form-group input[type="file"] { padding: 8px; }
+        .file-input-label { display: block; margin-bottom: 5px; font-weight: 600; }
+        .file-input-wrapper { position: relative; display: inline-block; width: 100%; }
+        .file-input-label-styled { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 12px; border: 2px dashed var(--dusty-rose); border-radius: 6px; cursor: pointer; background: var(--cream); color: var(--charcoal); font-weight: 600; transition: all 0.3s; }
+        .file-input-label-styled:hover { background: rgba(217, 143, 165, 0.1); }
+        #pdfFile { display: none; }
+        .file-name { font-size: 0.9em; color: var(--gold); margin-top: 5px; }
         .empty-state { text-align: center; padding: 40px 20px; color: var(--gold); }
         .empty-state-icon { font-size: 4em; margin-bottom: 20px; }
         .copyright { text-align: center; margin-top: 40px; padding-top: 20px; border-top: 2px solid var(--cream); color: var(--gold); font-size: 0.85em; }
+
+        /* PDF Viewer Styles */
+        #pdfViewer { max-width: 100%; height: 500px; border: 2px solid var(--cream); border-radius: 8px; margin: 20px 0; }
+        .pdf-controls { display: flex; gap: 10px; margin-bottom: 15px; align-items: center; flex-wrap: wrap; }
+        .pdf-controls button { padding: 8px 15px; font-size: 0.9em; }
+        .pdf-page-info { font-size: 0.9em; color: var(--charcoal); }
+        .loading { text-align: center; padding: 20px; color: var(--gold); }
+        .upload-progress { width: 100%; height: 4px; background: var(--cream); border-radius: 2px; overflow: hidden; margin-top: 10px; display: none; }
+        .upload-progress-bar { height: 100%; background: var(--dusty-rose); width: 0%; transition: width 0.3s; }
+        .success-message { color: #51cf66; margin-top: 10px; }
     </style>
 </head>
 <body>
@@ -65,6 +84,7 @@
                 <input type="text" id="searchInput" placeholder="Search patterns..." style="flex: 1; min-width: 200px; max-width: 300px;">
                 <button onclick="openAddModal()">+ Add Pattern</button>
             </div>
+
             <div class="pattern-grid" id="patternGrid">
                 <div class="empty-state">
                     <div class="empty-state-icon">🧶</div>
@@ -112,28 +132,69 @@
         <div class="modal-content">
             <button class="close-btn" onclick="closeModal()">×</button>
             <h2 style="color: var(--dusty-rose); margin-bottom: 20px;">Add New Pattern</h2>
-            <form onsubmit="savePattern(event)">
+            <form onsubmit="savePattern(event)" id="patternForm">
                 <div class="form-group">
                     <label>Pattern Name *</label>
                     <input type="text" id="patternName" required>
                 </div>
+
                 <div class="form-group">
                     <label>Designer</label>
                     <input type="text" id="patternDesigner">
                 </div>
+
                 <div class="form-group">
                     <label>Category</label>
                     <input type="text" id="patternCategory" placeholder="e.g., Socks, Sweater">
                 </div>
-                <button type="submit">Save Pattern</button>
+
+                <div class="form-group">
+                    <label class="file-input-label">Upload PDF Pattern (Optional)</label>
+                    <div class="file-input-wrapper">
+                        <label for="pdfFile" class="file-input-label-styled">
+                            <span>📄 Choose PDF File</span>
+                        </label>
+                        <input type="file" id="pdfFile" accept=".pdf" />
+                    </div>
+                    <div class="file-name" id="fileName"></div>
+                </div>
+
+                <div class="upload-progress" id="uploadProgress">
+                    <div class="upload-progress-bar" id="uploadProgressBar"></div>
+                </div>
+                <div class="success-message" id="successMessage" style="display: none;"></div>
+
+                <button type="submit" id="saveBtn">Save Pattern</button>
             </form>
+        </div>
+    </div>
+
+    <!-- View Pattern Modal (for PDF viewing) -->
+    <div class="modal" id="viewPatternModal">
+        <div class="modal-content" style="max-width: 800px;">
+            <button class="close-btn" onclick="closeViewModal()">×</button>
+            <h2 id="viewPatternTitle" style="color: var(--dusty-rose); margin-bottom: 20px;"></h2>
+
+            <div id="noPdfMessage" style="padding: 20px; text-align: center; color: var(--gold);">
+                <p>No PDF uploaded for this pattern yet.</p>
+            </div>
+
+            <div id="pdfViewerContainer" style="display: none;">
+                <div class="pdf-controls">
+                    <button id="prevPageBtn" onclick="previousPage()">← Previous</button>
+                    <span class="pdf-page-info">Page <span id="currentPage">1</span> of <span id="totalPages">0</span></span>
+                    <button id="nextPageBtn" onclick="nextPage()">Next →</button>
+                </div>
+                <canvas id="pdfViewer"></canvas>
+            </div>
         </div>
     </div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
         import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-auth.js";
-        import { getFirestore, collection, query, where, getDocs, setDoc, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
+        import { getFirestore, collection, query, where, getDocs, setDoc, deleteDoc, doc, updateDoc } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
+        import { getStorage, ref, uploadBytes, getBytes, deleteObject } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-storage.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyAw_La4RvRcCGdoz_U68AtjYBcHJ0tRifI",
@@ -147,10 +208,17 @@
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
+        const storage = getStorage(app);
 
         let currentUser = null;
         let isSignUpMode = false;
         let patterns = [];
+        let currentPdfDoc = null;
+        let pdfDoc = null;
+        let currentPageNum = 1;
+
+        // Set up pdf.js worker
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
         onAuthStateChanged(auth, async (user) => {
             if (user) {
@@ -200,16 +268,124 @@
 
         window.savePattern = async (e) => {
             e.preventDefault();
-            const pattern = {
-                userId: currentUser.uid,
-                name: document.getElementById('patternName').value,
-                designer: document.getElementById('patternDesigner').value,
-                category: document.getElementById('patternCategory').value,
-                dateAdded: new Date().toISOString()
-            };
-            await setDoc(doc(db, 'patterns', Date.now().toString()), pattern);
-            loadPatterns();
-            closeModal();
+            const saveBtn = document.getElementById('saveBtn');
+            saveBtn.disabled = true;
+            saveBtn.textContent = 'Saving...';
+
+            try {
+                const patternId = Date.now().toString();
+                const pattern = {
+                    userId: currentUser.uid,
+                    name: document.getElementById('patternName').value,
+                    designer: document.getElementById('patternDesigner').value,
+                    category: document.getElementById('patternCategory').value,
+                    dateAdded: new Date().toISOString(),
+                    hasPdf: false
+                };
+
+                // Handle PDF upload if selected
+                const pdfFile = document.getElementById('pdfFile').files[0];
+                if (pdfFile) {
+                    const progressDiv = document.getElementById('uploadProgress');
+                    progressDiv.style.display = 'block';
+
+                    try {
+                        const storageRef = ref(storage, `patterns/${currentUser.uid}/${patternId}.pdf`);
+
+                        // Upload with progress tracking
+                        const task = uploadBytes(storageRef, pdfFile);
+
+                        await task;
+                        pattern.hasPdf = true;
+                        pattern.pdfPath = `patterns/${currentUser.uid}/${patternId}.pdf`;
+
+                        progressDiv.style.display = 'none';
+                        document.getElementById('successMessage').textContent = '✓ PDF uploaded successfully!';
+                        document.getElementById('successMessage').style.display = 'block';
+                    } catch (uploadError) {
+                        console.error('PDF upload error:', uploadError);
+                        alert('Error uploading PDF. Pattern saved without PDF.');
+                    }
+                }
+
+                await setDoc(doc(db, 'patterns', patternId), pattern);
+                loadPatterns();
+                closeModal();
+            } catch (error) {
+                alert('Error saving pattern: ' + error.message);
+            } finally {
+                saveBtn.disabled = false;
+                saveBtn.textContent = 'Save Pattern';
+            }
+        };
+
+        window.viewPattern = async (patternId) => {
+            const pattern = patterns.find(p => p.id === patternId);
+            if (!pattern) return;
+
+            currentPdfDoc = patternId;
+            document.getElementById('viewPatternTitle').textContent = pattern.name;
+
+            if (pattern.hasPdf && pattern.pdfPath) {
+                try {
+                    const pdfRef = ref(storage, pattern.pdfPath);
+                    const pdfBytes = await getBytes(pdfRef);
+                    const pdfBlob = new Blob([pdfBytes], { type: 'application/pdf' });
+                    const pdfUrl = URL.createObjectURL(pdfBlob);
+
+                    pdfDoc = await pdfjsLib.getDocument(pdfUrl).promise;
+                    currentPageNum = 1;
+
+                    document.getElementById('noPdfMessage').style.display = 'none';
+                    document.getElementById('pdfViewerContainer').style.display = 'block';
+                    document.getElementById('totalPages').textContent = pdfDoc.numPages;
+
+                    renderPage(currentPageNum);
+                } catch (error) {
+                    console.error('Error loading PDF:', error);
+                    alert('Error loading PDF');
+                }
+            } else {
+                document.getElementById('noPdfMessage').style.display = 'block';
+                document.getElementById('pdfViewerContainer').style.display = 'none';
+            }
+
+            document.getElementById('viewPatternModal').classList.add('active');
+        };
+
+        window.renderPage = async (pageNum) => {
+            if (!pdfDoc) return;
+
+            const page = await pdfDoc.getPage(pageNum);
+            const canvas = document.getElementById('pdfViewer');
+            const ctx = canvas.getContext('2d');
+            const viewport = page.getViewport({ scale: 1.5 });
+
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+
+            await page.render({
+                canvasContext: ctx,
+                viewport: viewport
+            }).promise;
+
+            document.getElementById('currentPage').textContent = pageNum;
+            document.getElementById('prevPageBtn').disabled = pageNum <= 1;
+            document.getElementById('nextPageBtn').disabled = pageNum >= pdfDoc.numPages;
+        };
+
+        window.nextPage = () => {
+            if (pdfDoc && currentPageNum < pdfDoc.numPages) {
+                currentPageNum++;
+                renderPage(currentPageNum);
+            }
+        };
+
+        window.previousPage = () => {
+            if (currentPageNum > 1) {
+                currentPageNum--;
+                renderPage(currentPageNum);
+            }
         };
 
         window.renderPatterns = () => {
@@ -218,16 +394,33 @@
                 grid.innerHTML = '<div class="empty-state"><div class="empty-state-icon">🧶</div><p>No patterns yet!</p></div>';
                 return;
             }
+
             grid.innerHTML = patterns.map((p, i) => `
-                <div class="pattern-card">
-                    <div class="card-image" style="background: linear-gradient(135deg, ${['#D4A574', '#B8D4C8', '#F4C5A0'][i % 3]} 0%, ${['#D98FA5', '#A3C5B8', '#E6A87A'][i % 3]} 100%);">🧶</div>
+                <div class="pattern-card" onclick="viewPattern('${p.id}')">
+                    <div class="card-image" style="background: linear-gradient(135deg, ${['#D4A574', '#B8D4C8', '#F4C5A0'][i % 3]} 0%, ${['#D98FA5', '#A3C5B8', '#E6A87A'][i % 3]} 100%);">
+                        ${p.hasPdf ? '📄' : '🧶'}
+                    </div>
                     <div class="card-content">
                         <div class="card-title">${p.name}</div>
                         ${p.designer ? `<div style="font-size: 0.85em; color: var(--gold);">by ${p.designer}</div>` : ''}
+                        ${p.hasPdf ? `<span class="card-badge">PDF Available</span>` : ''}
                     </div>
                 </div>
             `).join('');
         };
+
+        // File input handler
+        document.addEventListener('DOMContentLoaded', () => {
+            const pdfInput = document.getElementById('pdfFile');
+            pdfInput.addEventListener('change', (e) => {
+                const fileName = document.getElementById('fileName');
+                if (e.target.files.length > 0) {
+                    fileName.textContent = '✓ ' + e.target.files[0].name;
+                } else {
+                    fileName.textContent = '';
+                }
+            });
+        });
 
         window.openAuthModal = () => {
             isSignUpMode = false;
@@ -242,14 +435,22 @@
         };
 
         window.openAddModal = () => {
+            document.getElementById('patternForm').reset();
+            document.getElementById('fileName').textContent = '';
+            document.getElementById('successMessage').style.display = 'none';
+            document.getElementById('uploadProgress').style.display = 'none';
             document.getElementById('patternModal').classList.add('active');
         };
 
         window.closeModal = () => {
             document.getElementById('patternModal').classList.remove('active');
-            document.getElementById('patternName').value = '';
-            document.getElementById('patternDesigner').value = '';
-            document.getElementById('patternCategory').value = '';
+        };
+
+        window.closeViewModal = () => {
+            document.getElementById('viewPatternModal').classList.remove('active');
+            if (pdfDoc) {
+                pdfDoc = null;
+            }
         };
     </script>
 </body>
